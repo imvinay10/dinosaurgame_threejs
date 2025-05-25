@@ -16,9 +16,12 @@ const ThreeScene = () => {
             0.1,
             1000
         );
-        camera.position.set(2, 2, 5);
+        camera.position.set(4.61, 5, 29);
 
-        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        const renderer = new THREE.WebGLRenderer({
+            antialias: true,
+            alpha: true,
+        });
         renderer.setSize(window.innerWidth, window.innerHeight);
         renderer.shadowMap.enabled = true;
         mountRef.current?.appendChild(renderer.domElement);
@@ -32,17 +35,27 @@ const ThreeScene = () => {
             color?: number;
             velocity?: { x: number; y: number; z: number };
             position?: { x: number; y: number; z: number };
+            zAccelaration?: boolean;
         }
 
         class Box extends THREE.Mesh<
             THREE.BoxGeometry,
             THREE.MeshStandardMaterial
         > {
+            width: number;
             height: number;
+            depth: number;
             velocity: { x: number; y: number; z: number };
-            top: number;
-            bottom: number;
             gravity: number;
+
+            top: number = 0;
+            bottom: number = 0;
+            left: number = 0;
+            right: number = 0;
+
+            front: number = 0;
+            back: number = 0;
+            zAccelaration: boolean;
 
             constructor({
                 width,
@@ -51,78 +64,93 @@ const ThreeScene = () => {
                 color = 0x00ff00,
                 velocity = { x: 0, y: 0, z: 0 },
                 position = { x: 0, y: 0, z: 0 },
+                zAccelaration = false,
             }: BoxOptions) {
                 const geometry = new THREE.BoxGeometry(width, height, depth);
                 const material = new THREE.MeshStandardMaterial({ color });
-
                 super(geometry, material);
+
                 this.position.set(position.x, position.y, position.z);
-
+                this.width = width;
                 this.height = height;
-                this.velocity = velocity;
+                this.depth = depth;
 
-                this.top = this.position.y + height / 2;
-                this.bottom = this.position.y - height / 2;
+                this.front = this.position.z + this.depth / 2;
+                this.back = this.position.z - this.depth / 2;
+                this.velocity = velocity;
                 this.gravity = -0.005;
-                // this.castShadow = true
+
+                this.zAccelaration = zAccelaration;
+                this.updateSides();
+            }
+
+            updateSides() {
+                this.top = this.position.y + this.height / 2;
+                this.bottom = this.position.y - this.height / 2;
+                this.left = this.position.x - this.width / 2;
+                this.right = this.position.x + this.width / 2;
+                this.front = this.position.z + this.depth / 2;
+                this.back = this.position.z - this.depth / 2;
             }
 
             update(ground: Box) {
                 this.applyGravity(ground);
 
                 this.position.x += this.velocity.x;
-                this.position.y += this.velocity.y;
                 this.position.z += this.velocity.z;
-                this.top = this.position.y + this.height / 2;
-                this.bottom = this.position.y - this.height / 2;
+                this.updateSides();
+                if (this.zAccelaration) this.velocity.z += 0.003;
             }
 
             applyGravity(ground: Box) {
                 this.velocity.y += this.gravity;
 
-                // Predict next bottom position
                 const nextBottom =
                     this.position.y + this.velocity.y - this.height / 2;
 
-                // Bounce if we hit the ground
-                if (nextBottom <= ground.top) {
-                    // Snap to ground
+                if (boxCollision({ box1: this, ground })) {
                     this.position.y = ground.top + this.height / 2;
+                    this.velocity.y = -this.velocity.y * 0.4;
 
-                    // Reverse and dampen velocity
-                    this.velocity.y = -this.velocity.y * 0.6;
-
-                    // Stop very small bounces
                     if (Math.abs(this.velocity.y) < 0.005) {
                         this.velocity.y = 0;
                     }
                 } else {
-                    // Normal movement
                     this.position.y += this.velocity.y;
                 }
 
-                // Update bounding box values
-                this.top = this.position.y + this.height / 2;
-                this.bottom = this.position.y - this.height / 2;
+                this.updateSides();
             }
         }
+
+        const boxCollision = ({ box1, ground }: { box1: Box; ground: Box }) => {
+            const xCollision =
+                box1.right >= ground.left && box1.left <= ground.right;
+            const yCollision =
+                box1.top >= ground.bottom &&
+                box1.bottom + box1.velocity.y <= ground.top;
+            const zCollision =
+                box1.front >= ground.back && box1.back <= ground.front;
+
+            return xCollision && yCollision && zCollision;
+        };
 
         const cube = new Box({
             width: 1,
             height: 1,
             depth: 1,
             velocity: { x: 0, y: -0.01, z: 0 },
-            position: { x: 0, y: 2, z: 0 },
+            position: { x: 0, y: 2, z: 20 },
         });
         cube.castShadow = true;
         cube.position.y = 1;
         scene.add(cube);
 
         const ground = new Box({
-            width: 5,
+            width: 15,
             height: 0.5,
-            depth: 10,
-            color: 0xff5555,
+            depth: 50,
+            color: 0xc4a086,
             position: { x: 0, y: -2, z: 0 },
         });
 
@@ -147,6 +175,9 @@ const ThreeScene = () => {
             s: {
                 pressed: false,
             },
+            space: {
+                pressed: false,
+            },
         };
 
         window.addEventListener("keydown", (e) => {
@@ -165,6 +196,10 @@ const ThreeScene = () => {
 
                 case "KeyS":
                     keys.s.pressed = true;
+                    break;
+
+                case "Space":
+                    cube.velocity.y = 0.15;
                     break;
             }
         });
@@ -190,30 +225,54 @@ const ThreeScene = () => {
         });
 
         const light = new THREE.DirectionalLight(0xffffff, 1);
-        light.position.set(3, 5, 2);
+        light.position.set(3, 5, 1);
         light.castShadow = true;
         scene.add(light);
         scene.add(new THREE.AmbientLight(0xffffff, 0.3));
 
+        const enemies: Box[] = [];
+        let frames = 0;
+        let spawnRate = 200;
         const animate = () => {
-            requestAnimationFrame(animate);
+            const animationId = requestAnimationFrame(animate);
 
-            if (keys.a.pressed) {
-                cube.velocity.x = -0.05;
-            } else if (keys.d.pressed) {
-                cube.velocity.x = 0.05;
-            } else if (keys.w.pressed) {
-                cube.velocity.z = -0.05;
-            } else if (keys.s.pressed) {
-                cube.velocity.z = 0.05;
-            } else {
-                cube.velocity.x = 0;
-                cube.velocity.z = 0;
+            frames++;
+
+            //  Spawn enemy every 30 frames
+            if (frames % spawnRate === 0) {
+                if (spawnRate > 20) spawnRate -= 20; // Decrease spawn rate every 30 frames
+                const enemy = new Box({
+                    width: 1,
+                    height: 1,
+                    depth: 1,
+                    velocity: { x: 0, y: 0, z: 0.009 },
+                    position: { x: (Math.random() - 0.5) * 15, y: 0, z: -18 },
+                    color: 0xff0000,
+                    zAccelaration: true,
+                });
+                enemy.castShadow = true;
+                scene.add(enemy);
+                enemies.push(enemy);
             }
 
+            cube.velocity.x =
+                (keys.d.pressed ? 1 : 0) - (keys.a.pressed ? 1 : 0);
+            cube.velocity.z =
+                (keys.s.pressed ? 1 : 0) - (keys.w.pressed ? 1 : 0);
+            const speed = 0.09;
+            cube.velocity.x *= speed;
+            cube.velocity.z *= speed;
+
             cube.update(ground);
-            // cube.position.y += -0.01
-            // cube.rotation.y += 0.01
+
+            enemies.forEach((enemy) => {
+                enemy.update(ground);
+                if (boxCollision({ box1: cube, ground: enemy })) {
+                    console.log("Collision detected with enemy!");
+                    cancelAnimationFrame(animationId);
+                }
+            });
+
             controls.update();
             renderer.render(scene, camera);
         };
