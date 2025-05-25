@@ -24,37 +24,111 @@ const ThreeScene = () => {
     mountRef.current?.appendChild(renderer.domElement)
 
     const controls = new OrbitControls(camera, renderer.domElement)
-    controls.enableDamping = true
 
-    const cubeGeometry = new THREE.BoxGeometry(1, 1, 1)
-    const cubeMaterial = new THREE.MeshStandardMaterial({ color: 0x00ff00 })
-    const cube = new THREE.Mesh(cubeGeometry, cubeMaterial)
+
+    interface BoxOptions {
+      width: number
+      height: number
+      depth: number
+      color?: number
+      velocity?: { x: number; y: number; z: number }
+      position?: { x: number; y: number; z: number }
+
+    }
+
+    class Box extends THREE.Mesh<THREE.BoxGeometry, THREE.MeshStandardMaterial> {
+      height: number
+      velocity: { x: number; y: number; z: number }
+      top: number
+      bottom: number
+      gravity: number
+
+      constructor({
+        width,
+        height,
+        depth,
+        color = 0x00ff00,
+        velocity = { x: 0, y: 0, z: 0 },
+        position = { x: 0, y: 0, z: 0 }
+      }: BoxOptions) {
+        const geometry = new THREE.BoxGeometry(width, height, depth)
+        const material = new THREE.MeshStandardMaterial({ color })
+
+        super(geometry, material)
+        this.position.set(position.x, position.y, position.z)
+
+        this.height = height
+        this.velocity = velocity
+
+        this.top = this.position.y + height / 2
+        this.bottom = this.position.y - height / 2
+        this.gravity = -0.005
+        // this.castShadow = true
+      }
+
+      update(ground: Box) {
+        this.position.y += this.velocity.y
+
+        this.top = this.position.y + this.height / 2
+        this.bottom = this.position.y - this.height / 2
+
+        this.velocity.y += this.gravity
+
+
+        //here we hitting the ground
+        if (this.bottom + this.velocity.y <= ground.top) {
+          this.velocity.y *=0.8
+          this.velocity.y = -this.velocity.y
+        }
+        else { this.position.y += this.velocity.y }
+      }
+    }
+
+
+
+    const cube = new Box({
+      width: 1,
+      height: 1,
+      depth: 1,
+      velocity: { x: 0, y: -0.01, z: 0 },
+      position: { x: 0, y: 2, z: 0 }
+    })
     cube.castShadow = true
-    cube.position.y = 2
+    cube.position.y = 1
     scene.add(cube)
 
-    const groundGeometry = new THREE.PlaneGeometry(10, 10)
-    const groundMaterial = new THREE.MeshStandardMaterial({ color: 0xff5555 })
-    const ground = new THREE.Mesh(groundGeometry, groundMaterial)
-    ground.rotation.x = -Math.PI / 2
-    ground.position.y = 0
+
+
+
+
+    const ground = new Box({ width: 5, height: 0.5, depth: 10, color: 0xff5555, position: { x: 0, y: -2, z: 0 } })
+
+    // new THREE.BoxGeometry(5, 0.5, 10)
+    // const groundMaterial = new THREE.MeshStandardMaterial({ color: 0xff5555 })
+    // const ground = new THREE.Mesh(groundGeometry, groundMaterial)
+    // ground.rotation.x = -Math.PI / 2
+
     ground.receiveShadow = true
     scene.add(ground)
 
 
     const light = new THREE.DirectionalLight(0xffffff, 1)
-    light.position.set(3, 5,2)
+    light.position.set(3, 5, 2)
     light.castShadow = true
     scene.add(light)
     scene.add(new THREE.AmbientLight(0xffffff, 0.3))
 
     const animate = () => {
       requestAnimationFrame(animate)
-      cube.position.y += -0.01
-      // cube.rotation.y += 0.01
+      cube.update(ground)
+      // cube.position.y += -0.01
+      cube.rotation.y += 0.01
       controls.update()
       renderer.render(scene, camera)
     }
+
+    // console.log(cube.position.y - cube.height / 2)
+    console.log(ground.position.y + ground.height / 2)
 
     animate()
 
