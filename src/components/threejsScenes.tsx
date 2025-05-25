@@ -68,23 +68,42 @@ const ThreeScene = () => {
             }
 
             update(ground: Box) {
-                this.position.x += this.velocity.x;
+                this.applyGravity(ground);
 
+                this.position.x += this.velocity.x;
+                this.position.y += this.velocity.y;
+                this.position.z += this.velocity.z;
                 this.top = this.position.y + this.height / 2;
                 this.bottom = this.position.y - this.height / 2;
-                this.position.y += this.velocity.y;
-
-                this.applyGravity();
             }
 
-            applyGravity() {
-                //here we hitting the ground
-                if (this.bottom + this.velocity.y <= ground.top) {
-                    this.velocity.y *= 0.8;
-                    this.velocity.y = -this.velocity.y;
+            applyGravity(ground: Box) {
+                this.velocity.y += this.gravity;
+
+                // Predict next bottom position
+                const nextBottom =
+                    this.position.y + this.velocity.y - this.height / 2;
+
+                // Bounce if we hit the ground
+                if (nextBottom <= ground.top) {
+                    // Snap to ground
+                    this.position.y = ground.top + this.height / 2;
+
+                    // Reverse and dampen velocity
+                    this.velocity.y = -this.velocity.y * 0.6;
+
+                    // Stop very small bounces
+                    if (Math.abs(this.velocity.y) < 0.005) {
+                        this.velocity.y = 0;
+                    }
                 } else {
+                    // Normal movement
                     this.position.y += this.velocity.y;
                 }
+
+                // Update bounding box values
+                this.top = this.position.y + this.height / 2;
+                this.bottom = this.position.y - this.height / 2;
             }
         }
 
@@ -115,23 +134,37 @@ const ThreeScene = () => {
         ground.receiveShadow = true;
         scene.add(ground);
 
-        const keys = {
+        let keys = {
             a: {
                 pressed: false,
             },
-            b: {
+            d: {
+                pressed: false,
+            },
+            w: {
+                pressed: false,
+            },
+            s: {
                 pressed: false,
             },
         };
 
         window.addEventListener("keydown", (e) => {
-            switch (e.key) {
-                case "d":
+            switch (e.code) {
+                case "KeyD":
                     keys.d.pressed = true;
                     break;
 
-                case "a":
+                case "KeyA":
                     keys.a.pressed = true;
+                    break;
+
+                case "KeyW":
+                    keys.w.pressed = true;
+                    break;
+
+                case "KeyS":
+                    keys.s.pressed = true;
                     break;
             }
         });
@@ -139,11 +172,19 @@ const ThreeScene = () => {
         window.addEventListener("keyup", (e) => {
             switch (e.code) {
                 case "KeyA":
+                    keys.a.pressed = false;
+                    break;
+
+                case "KeyD":
                     keys.d.pressed = false;
                     break;
 
-                case "KeyB":
-                    keys.a.pressed = false;
+                case "KeyW":
+                    keys.w.pressed = false;
+                    break;
+
+                case "KeyS":
+                    keys.s.pressed = false;
                     break;
             }
         });
@@ -158,9 +199,16 @@ const ThreeScene = () => {
             requestAnimationFrame(animate);
 
             if (keys.a.pressed) {
-                cube.velocity.x = -0.01;
+                cube.velocity.x = -0.05;
             } else if (keys.d.pressed) {
-                cube.velocity.x = 0.01;
+                cube.velocity.x = 0.05;
+            } else if (keys.w.pressed) {
+                cube.velocity.z = -0.05;
+            } else if (keys.s.pressed) {
+                cube.velocity.z = 0.05;
+            } else {
+                cube.velocity.x = 0;
+                cube.velocity.z = 0;
             }
 
             cube.update(ground);
