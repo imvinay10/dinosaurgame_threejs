@@ -183,7 +183,112 @@ const ThreeScene = () => {
             }
         });
 
-        const enemies: Box[] = [];
+        // Enemy class to replace the Box enemy
+        class Enemy {
+            model: THREE.Group;
+            velocity: { x: number; y: number; z: number };
+            gravity: number;
+            zAccelaration: boolean;
+            width: number;
+            height: number;
+            depth: number;
+            top = 0;
+            bottom = 0;
+            left = 0;
+            right = 0;
+            front = 0;
+            back = 0;
+            isGrounded = false;
+            mixer: THREE.AnimationMixer | null = null;
+
+            constructor(position: { x: number; y: number; z: number }) {
+                this.model = new THREE.Group();
+                this.velocity = { x: 0, y: 0, z: 0.009 };
+                this.gravity = -0.005;
+                this.zAccelaration = true;
+                this.width = 1;
+                this.height = 1;
+                this.depth = 1;
+
+                // Set initial position
+                this.model.position.set(position.x, position.y, position.z);
+
+                // Load the Wheelbarrow model
+                const loader = new GLTFLoader();
+                loader.load('/WheelbarrowWalk.glb', (gltf: { scene: any; animations: string | any[]; }) => {
+                    const model = gltf.scene;
+                    model.scale.set(1, 1, 1);
+
+                    model.traverse((child: THREE.Mesh<THREE.BufferGeometry<THREE.NormalBufferAttributes>, THREE.Material | THREE.Material[], THREE.Object3DEventMap>) => {
+                        if ((child as THREE.Mesh).isMesh) {
+                            child.castShadow = true;
+                            child.receiveShadow = true;
+                        }
+                    });
+
+                    if (gltf.animations.length > 0) {
+                        this.mixer = new THREE.AnimationMixer(model);
+                        this.mixer.clipAction(gltf.animations[0]).play();
+                    }
+
+                    this.model.add(model);
+                });
+            }
+
+            updateSides() {
+                this.top = this.model.position.y + this.height / 2;
+                this.bottom = this.model.position.y - this.height / 2;
+                this.left = this.model.position.x - this.width / 2;
+                this.right = this.model.position.x + this.width / 2;
+                this.front = this.model.position.z + this.depth / 2;
+                this.back = this.model.position.z - this.depth / 2;
+            }
+
+            update(ground: Box, delta: number) {
+                if (this.mixer) this.mixer.update(delta);
+
+                this.applyGravity(ground);
+                this.model.position.x += this.velocity.x;
+                this.model.position.z += this.velocity.z;
+                if (this.zAccelaration) this.velocity.z += 0.003;
+                this.updateSides();
+            }
+
+            applyGravity(ground: Box) {
+                this.velocity.y += this.gravity;
+                const nextBottom = this.model.position.y + this.velocity.y - this.height / 2;
+
+                // Create a temporary box for collision detection
+                const tempBox = {
+                    position: this.model.position,
+                    width: this.width,
+                    height: this.height,
+                    depth: this.depth,
+                    velocity: this.velocity,
+                    top: this.top,
+                    bottom: this.bottom,
+                    left: this.left,
+                    right: this.right,
+                    front: this.front,
+                    back: this.back,
+                    updateSides: this.updateSides.bind(this)
+                } as unknown as Box;
+
+                if (boxCollision({ box1: tempBox, ground })) {
+                    this.model.position.y = ground.top + this.height / 2;
+                    this.velocity.y = 0;
+                    if (Math.abs(this.velocity.y) < 0.005) this.velocity.y = 0;
+                    this.isGrounded = true;
+                } else {
+                    this.model.position.y += this.velocity.y;
+                    this.isGrounded = false;
+                }
+
+                this.updateSides();
+            }
+        }
+
+        const enemies: Enemy[] = [];
         let frames = 0;
         let spawnRate = 200;
 
@@ -216,7 +321,7 @@ const ThreeScene = () => {
                     if (gltf.animations.length > 0) {
                         runningMixer = new THREE.AnimationMixer(runningModel);
                         gltf.animations.forEach((clip) => {
-                            clip.tracks = clip.tracks.filter(track => !track.name.match(/position/i));
+                            clip.tracks = clip.tracks.filter((track: { name: string; }) => !track.name.match(/position/i));
                         });
                         runningMixer.clipAction(gltf.animations[0]).play();
                     }
@@ -224,7 +329,7 @@ const ThreeScene = () => {
                 });
             }),
             new Promise<void>((resolve) => {
-                loader.load('/Running Jump.glb', (gltf) => {
+                loader.load('/Running Jump.glb', (gltf: { scene: THREE.Object3D<THREE.Object3DEventMap> | null; animations: any[]; }) => {
                     jumpModel = gltf.scene!;
                     if(!jumpModel) return
                     jumpModel.scale.set(1, 1, 1);
@@ -241,7 +346,7 @@ const ThreeScene = () => {
                     if (gltf.animations.length > 0) {
                         jumpMixer = new THREE.AnimationMixer(jumpModel);
                         gltf.animations.forEach((clip) => {
-                            clip.tracks = clip.tracks.filter(track => !track.name.match(/position/i));
+                            clip.tracks = clip.tracks.filter((track: { name: string; }) => !track.name.match(/position/i));
                         });
                         jumpMixer.clipAction(gltf.animations[0]).play();
                     }
@@ -289,17 +394,12 @@ const ThreeScene = () => {
             frames++;
             if (frames % spawnRate === 0) {
                 if (spawnRate > 20) spawnRate -= 20;
-                const enemy = new Box({
-                    width: 1,
-                    height: 1,
-                    depth: 1,
-                    velocity: { x: 0, y: 0, z: 0.009 },
-                    position: { x: (Math.random() - 0.5) * 15, y: 0, z: -18 },
-                    color: 0xff0000,
-                    zAccelaration: true,
+                const enemy = new Enemy({
+                    x: (Math.random() - 0.5) * 15,
+                    y: 0,
+                    z: -18
                 });
-                enemy.castShadow = true;
-                scene.add(enemy);
+                scene.add(enemy.model);
                 enemies.push(enemy);
             }
 
@@ -320,11 +420,34 @@ const ThreeScene = () => {
             modelContainer.position.copy(controller.position);
             modelContainer.rotation.copy(controller.rotation);
 
-            enemies.forEach((enemy) => {
-                enemy.update(ground);
-                if (boxCollision({ box1: controller, ground: enemy })) {
+            enemies.forEach((enemy, index) => {
+                enemy.update(ground, delta);
+
+                // Create a temporary box for collision detection
+                const tempBox = {
+                    position: enemy.model.position,
+                    width: enemy.width,
+                    height: enemy.height,
+                    depth: enemy.depth,
+                    velocity: { x: 0, y: 0, z: 0 },
+                    top: enemy.top,
+                    bottom: enemy.bottom,
+                    left: enemy.left,
+                    right: enemy.right,
+                    front: enemy.front,
+                    back: enemy.back,
+                    updateSides: enemy.updateSides.bind(enemy)
+                } as unknown as Box;
+
+                if (boxCollision({ box1: controller, ground: tempBox })) {
                     console.log('Collision detected with enemy!');
                     cancelAnimationFrame(animationId);
+                }
+
+                // Remove enemies that are too far behind
+                if (enemy.model.position.z > 30) {
+                    scene.remove(enemy.model);
+                    enemies.splice(index, 1);
                 }
             });
 
