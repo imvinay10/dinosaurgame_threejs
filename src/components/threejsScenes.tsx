@@ -1,24 +1,33 @@
-'use client';
+"use client";
 
-import { useEffect, useRef } from 'react';
-import * as THREE from 'three';
-import { TextureLoader } from 'three';
-import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls';
-import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader';
+import { useEffect, useRef } from "react";
+import * as THREE from "three";
+import { OrbitControls } from "three/examples/jsm/controls/OrbitControls";
+import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader";
+import { Sky } from "three/examples/jsm/objects/Sky.js";
 
 const ThreeScene = () => {
     const mountRef = useRef<HTMLDivElement | null>(null);
 
     useEffect(() => {
         const scene = new THREE.Scene();
-        scene.background = new THREE.Color(0xdddddd);
+        const sky = new Sky();
+        sky.scale.setScalar(450000);
+        scene.add(sky);
 
-        const camera = new THREE.PerspectiveCamera(
-            75,
-            window.innerWidth / window.innerHeight,
-            0.1,
-            1000
-        );
+        const sun = new THREE.Vector3();
+        const uniforms = sky.material.uniforms;
+        uniforms["turbidity"].value = 10;
+        uniforms["rayleigh"].value = 2;
+        uniforms["mieCoefficient"].value = 0.005;
+        uniforms["mieDirectionalG"].value = 0.8;
+
+        const phi = THREE.MathUtils.degToRad(90 - 10);
+        const theta = THREE.MathUtils.degToRad(180);
+        sun.setFromSphericalCoords(1, phi, theta);
+        uniforms["sunPosition"].value.copy(sun);
+
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
         camera.position.set(4.61, 5, 29);
 
         const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
@@ -63,7 +72,11 @@ const ThreeScene = () => {
                 zAccelaration = false,
             }: BoxOptions) {
                 const geometry = new THREE.BoxGeometry(width, height, depth);
-                const material = new THREE.MeshStandardMaterial({ color });
+                const material = new THREE.MeshStandardMaterial({
+                    map: enemyTexture,
+                    roughness: 0.8,
+                    metalness: 0.2,
+                });
                 super(geometry, material);
 
                 this.width = width;
@@ -118,6 +131,12 @@ const ThreeScene = () => {
             return x && y && z;
         };
 
+        const enemyTexture = new THREE.TextureLoader().load("/clay_roof_tiles_02_diff_4k.jpg", (texture) => {
+            texture.wrapS = THREE.RepeatWrapping;
+            texture.wrapT = THREE.RepeatWrapping;
+            texture.repeat.set(1, 1);
+        });
+
         const controller = new Box({
             width: 1,
             height: 1,
@@ -137,20 +156,19 @@ const ThreeScene = () => {
         ground.receiveShadow = true;
         scene.add(ground);
 
-        const textureLoader = new TextureLoader();
-        textureLoader.load('/coast_sand_rocks_02_diff_4k.jpg', (texture) => {
+        new THREE.TextureLoader().load("/ground.jpg", (texture) => {
             texture.wrapS = THREE.RepeatWrapping;
             texture.wrapT = THREE.RepeatWrapping;
             texture.repeat.set(4, 10);
-            const material = new THREE.MeshStandardMaterial({ map: texture });
-            ground.material = material;
+            ground.material.map = texture;
+            ground.material.needsUpdate = true;
         });
 
-        const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
+        const directionalLight = new THREE.DirectionalLight(0xffffff, 1.2);
         directionalLight.position.set(3, 5, 1);
         directionalLight.castShadow = true;
         scene.add(directionalLight);
-        scene.add(new THREE.AmbientLight(0xffffff, 0.6));
+        scene.add(new THREE.AmbientLight(0xffffff, 0.8));
 
         const keys = {
             a: { pressed: false },
@@ -159,13 +177,21 @@ const ThreeScene = () => {
             s: { pressed: false },
         };
 
-        window.addEventListener('keydown', (e) => {
+        window.addEventListener("keydown", (e) => {
             switch (e.code) {
-                case 'KeyD': keys.d.pressed = true; break;
-                case 'KeyA': keys.a.pressed = true; break;
-                case 'KeyW': keys.w.pressed = true; break;
-                case 'KeyS': keys.s.pressed = true; break;
-                case 'Space':
+                case "KeyD":
+                    keys.d.pressed = true;
+                    break;
+                case "KeyA":
+                    keys.a.pressed = true;
+                    break;
+                case "KeyW":
+                    keys.w.pressed = true;
+                    break;
+                case "KeyS":
+                    keys.s.pressed = true;
+                    break;
+                case "Space":
                     if (controller.isGrounded) {
                         controller.velocity.y = 0.15;
                         controller.isGrounded = false;
@@ -174,12 +200,20 @@ const ThreeScene = () => {
             }
         });
 
-        window.addEventListener('keyup', (e) => {
+        window.addEventListener("keyup", (e) => {
             switch (e.code) {
-                case 'KeyD': keys.d.pressed = false; break;
-                case 'KeyA': keys.a.pressed = false; break;
-                case 'KeyW': keys.w.pressed = false; break;
-                case 'KeyS': keys.s.pressed = false; break;
+                case "KeyD":
+                    keys.d.pressed = false;
+                    break;
+                case "KeyA":
+                    keys.a.pressed = false;
+                    break;
+                case "KeyW":
+                    keys.w.pressed = false;
+                    break;
+                case "KeyS":
+                    keys.s.pressed = false;
+                    break;
             }
         });
 
@@ -199,24 +233,26 @@ const ThreeScene = () => {
 
         Promise.all([
             new Promise<void>((resolve) => {
-                loader.load('/Running.glb', (gltf: { scene: THREE.Object3D<THREE.Object3DEventMap> | null; animations: any[]; }) => {
+                loader.load("/Running.glb", (gltf) => {
                     runningModel = gltf.scene!;
-                    if(!runningModel) return
                     runningModel.scale.set(1, 1, 1);
                     runningModel.rotation.y = Math.PI;
                     runningModel.visible = false;
-
                     runningModel.traverse((child) => {
                         if ((child as THREE.Mesh).isMesh) {
                             child.castShadow = true;
                             child.receiveShadow = true;
+                            const material = (child as THREE.Mesh).material as THREE.MeshStandardMaterial;
+                            material.roughness = 1;
+                            material.metalness = 0;
                         }
                     });
-
                     if (gltf.animations.length > 0) {
                         runningMixer = new THREE.AnimationMixer(runningModel);
                         gltf.animations.forEach((clip) => {
-                            clip.tracks = clip.tracks.filter(track => !track.name.match(/position/i));
+                            clip.tracks = clip.tracks.filter(
+                                (track: any) => !track.name.match(/position/i)
+                            );
                         });
                         runningMixer.clipAction(gltf.animations[0]).play();
                     }
@@ -224,24 +260,26 @@ const ThreeScene = () => {
                 });
             }),
             new Promise<void>((resolve) => {
-                loader.load('/Running Jump.glb', (gltf) => {
+                loader.load("/Running Jump.glb", (gltf) => {
                     jumpModel = gltf.scene!;
-                    if(!jumpModel) return
                     jumpModel.scale.set(1, 1, 1);
                     jumpModel.rotation.y = Math.PI;
                     jumpModel.visible = false;
-
                     jumpModel.traverse((child) => {
                         if ((child as THREE.Mesh).isMesh) {
                             child.castShadow = true;
                             child.receiveShadow = true;
+                            const material = (child as THREE.Mesh).material as THREE.MeshStandardMaterial;
+                            material.roughness = 1;
+                            material.metalness = 0;
                         }
                     });
-
                     if (gltf.animations.length > 0) {
                         jumpMixer = new THREE.AnimationMixer(jumpModel);
                         gltf.animations.forEach((clip) => {
-                            clip.tracks = clip.tracks.filter(track => !track.name.match(/position/i));
+                            clip.tracks = clip.tracks.filter(
+                                (track: any) => !track.name.match(/position/i)
+                            );
                         });
                         jumpMixer.clipAction(gltf.animations[0]).play();
                     }
@@ -259,20 +297,18 @@ const ThreeScene = () => {
 
         const switchModel = (isGrounded: boolean) => {
             if (!runningModel || !jumpModel) return;
-
             if (currentModel) {
                 modelContainer.remove(currentModel);
                 currentModel.visible = false;
             }
-
             if (isGrounded) {
-                modelContainer.add(runningModel!);
-                runningModel!.visible = true;
+                modelContainer.add(runningModel);
+                runningModel.visible = true;
                 currentModel = runningModel;
                 currentMixer = runningMixer;
             } else {
-                modelContainer.add(jumpModel!);
-                jumpModel!.visible = true;
+                modelContainer.add(jumpModel);
+                jumpModel.visible = true;
                 currentModel = jumpModel;
                 currentMixer = jumpMixer;
             }
@@ -282,9 +318,11 @@ const ThreeScene = () => {
 
         const animate = () => {
             const animationId = requestAnimationFrame(animate);
-
             const delta = clock.getDelta();
             if (currentMixer) currentMixer.update(delta);
+            if (ground.material.map) {
+                ground.material.map.offset.y -= -0.04;
+            }
 
             frames++;
             if (frames % spawnRate === 0) {
@@ -295,7 +333,6 @@ const ThreeScene = () => {
                     depth: 1,
                     velocity: { x: 0, y: 0, z: 0.009 },
                     position: { x: (Math.random() - 0.5) * 15, y: 0, z: -18 },
-                    color: 0xff0000,
                     zAccelaration: true,
                 });
                 enemy.castShadow = true;
@@ -323,8 +360,12 @@ const ThreeScene = () => {
             enemies.forEach((enemy) => {
                 enemy.update(ground);
                 if (boxCollision({ box1: controller, ground: enemy })) {
-                    console.log('Collision detected with enemy!');
+                    console.log("Collision detected with enemy!");
                     cancelAnimationFrame(animationId);
+                    const gameOverText = document.getElementById("gameOverText");
+        if (gameOverText) {
+            gameOverText.style.display = "block";
+        }
                 }
             });
 
@@ -340,16 +381,55 @@ const ThreeScene = () => {
             renderer.setSize(window.innerWidth, window.innerHeight);
         };
 
-        window.addEventListener('resize', handleResize);
+        window.addEventListener("resize", handleResize);
 
         return () => {
-            window.removeEventListener('resize', handleResize);
+            window.removeEventListener("resize", handleResize);
             renderer.dispose();
             mountRef.current?.removeChild(renderer.domElement);
         };
     }, []);
 
-    return <div ref={mountRef} style={{ width: '100vw', height: '100vh' }} />;
+return (
+  <div ref={mountRef} style={{ width: "100vw", height: "100vh", position: "relative" }}>
+    <div
+      id="gameOverText"
+      style={{
+        position: "absolute",
+        top: 0,
+        left: 0,
+        width: "100%",
+        height: "100%",
+        backgroundColor: "rgba(0, 0, 0, 0.8)",
+        display: "none",
+        alignItems: "center",
+        justifyContent: "center",
+        flexDirection: "column",
+        zIndex: 10,
+        fontFamily: "'Press Start 2P', cursive",
+        color: "#fff",
+        textAlign: "center",
+        animation: "fadeIn 1s ease-out forwards",
+      }}
+    >
+      <div style={{ fontSize: "3rem", color: "red", textShadow: "2px 2px 5px black", margin: "5rem" }}>
+        GAME OVER
+      </div>
+      <div style={{ fontSize: "1.2rem", color: "#ccc" }}>
+        Refresh the page to try again
+      </div>
+    </div>
+    <style>{`
+      @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+
+      @keyframes fadeIn {
+        0% { opacity: 0; }
+        100% { opacity: 1; }
+      }
+    `}</style>
+  </div>
+);
+
 };
 
 export default ThreeScene;
