@@ -3,7 +3,6 @@
 import { useEffect, useRef } from "react";
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls";
-import { DRACOLoader } from "three/examples/jsm/loaders/DRACOLoader";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader";
 import { Sky } from "three/examples/jsm/objects/Sky.js";
 
@@ -22,11 +21,6 @@ const ThreeScene = () => {
         uniforms["rayleigh"].value = 2;
         uniforms["mieCoefficient"].value = 0.005;
         uniforms["mieDirectionalG"].value = 0.8;
-
-
-         const dracoLoader = new DRACOLoader();
-        dracoLoader.setDecoderPath("https://www.gstatic.com/draco/v1/decoders/");
-        dracoLoader.setDecoderConfig({ type: 'js' });
 
         const phi = THREE.MathUtils.degToRad(90 - 10);
         const theta = THREE.MathUtils.degToRad(180);
@@ -228,7 +222,6 @@ const ThreeScene = () => {
         let spawnRate = 200;
 
         const loader = new GLTFLoader();
-        loader.setDRACOLoader(dracoLoader);
 
         let modelContainer = new THREE.Group();
         scene.add(modelContainer);
